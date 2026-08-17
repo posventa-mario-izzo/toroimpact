@@ -16,28 +16,22 @@ Sistema de control de posventa para pólizas de vida (IUL, etc.), con el logo de
 
 ## Cómo correrlo en tu computadora (modo rápido, para probar)
 
-Necesitas tener [Node.js](https://nodejs.org) instalado (versión 18 o más reciente).
+Necesitas tener [Node.js](https://nodejs.org) y una base de datos [PostgreSQL](https://www.postgresql.org) instalados.
 
 ```bash
 cd posventa-mario-izzo
 npm install
+export DATABASE_URL="postgresql://usuario:contraseña@localhost:5432/tu_base_de_datos"
 npm start
 ```
 
 Luego abre en el navegador: http://localhost:3000
 
-Los datos se guardan en el archivo `data/clientes.json` dentro de esta misma carpeta.
+Los datos se guardan en la base de datos Postgres indicada en `DATABASE_URL` (la tabla `clientes` se crea sola la primera vez que arranca el servidor).
 
-⚠️ Importante: este modo solo funciona en la computadora donde lo corres. Si quieres que tu asistente entre desde otro lugar y ambos vean la misma información en tiempo real, necesitas publicarlo en internet (ver abajo).
+## Publicado en internet
 
-## Cómo publicarlo para que tú y tu asistente lo usen desde cualquier lugar
-
-Para tener un link único que ambos puedan abrir (desde la computadora o el celular) con la misma información compartida, este proyecto se puede desplegar en un servicio de hosting gratuito o económico, por ejemplo:
-
-- **Render.com** o **Railway.app**: subes esta carpeta (o la conectas a un repositorio de GitHub) y en unos minutos te dan un link público. Son gratuitos para uso ligero como este.
-- **Vercel** o **Floot**: si conectas alguno de estos en Claude (desde los ajustes de conectores), puedo ayudarte a desplegarlo directamente desde aquí sin que tengas que hacerlo tú manualmente.
-
-Cuando quieras, dime cuál opción prefieres y te ayudo con el paso a paso (o lo despliego yo mismo si conectas Vercel/Floot).
+Esta app está pensada para desplegarse en **Render.com** (plan gratuito) con una base de datos Postgres también gratuita de Render, para que tú y tu asistente entren desde cualquier lugar con el mismo link y vean la misma información en tiempo real.
 
 ## Plantilla para importar clientes en lote
 

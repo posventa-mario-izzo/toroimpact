@@ -1,32 +1,38 @@
-// Capa de almacenamiento simple basada en archivo JSON.
-// Suficiente para un equipo pequeño (Mario + asistente). Si el negocio crece
-// mucho, esto se puede migrar a Postgres/Supabase sin cambiar la API.
-const fs = require("fs");
-const path = require("path");
+// Capa de acceso a datos usando PostgreSQL (persistente de verdad, a
+// diferencia de guardar en un archivo local que se pierde en cada reinicio
+// del servidor en planes de hosting gratuitos).
+const { Pool } = require("pg");
 
-const DB_FILE = path.join(__dirname, "data", "clientes.json");
-
-function ensureDb() {
-  const dir = path.dirname(DB_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(DB_FILE)) {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ clientes: [] }, null, 2));
-  }
+if (!process.env.DATABASE_URL) {
+  console.warn(
+    "AVISO: no se encontró la variable de entorno DATABASE_URL. Configúrala con la cadena de conexión de tu base de datos Postgres."
+  );
 }
 
-function read() {
-  ensureDb();
-  const raw = fs.readFileSync(DB_FILE, "utf-8");
-  try {
-    return JSON.parse(raw);
-  } catch (e) {
-    return { clientes: [] };
-  }
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.PGSSLMODE === "disable" ? false : { rejectUnauthorized: false },
+});
+
+async function init() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS clientes (
+      id TEXT PRIMARY KEY,
+      nombre TEXT NOT NULL,
+      telefono TEXT DEFAULT '',
+      carrier TEXT DEFAULT '',
+      estado TEXT DEFAULT 'En proceso',
+      estado_poliza TEXT DEFAULT 'No recibida',
+      numero_poliza TEXT DEFAULT '',
+      fecha_aprobacion DATE,
+      fecha_venta DATE,
+      llamada_seguimiento_realizada BOOLEAN DEFAULT false,
+      fecha_llamada_seguimiento DATE,
+      notas JSONB DEFAULT '[]'::jsonb,
+      creado_en TIMESTAMPTZ DEFAULT now(),
+      actualizado_en TIMESTAMPTZ DEFAULT now()
+    );
+  `);
 }
 
-function write(data) {
-  ensureDb();
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-}
-
-module.exports = { read, write };
+module.exports = { pool, init };
