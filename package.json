@@ -1,0 +1,14 @@
+{
+  "name": "posventa-mario-izzo",
+  "version": "1.0.0",
+  "description": "Sistema de control de posventa - Mario Izzo",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
+    "nanoid": "^3.3.7"
+  }
+}
