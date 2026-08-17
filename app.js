@@ -93,9 +93,26 @@ function celdaSeguimiento(c) {
   return `<span class="seguimiento-futuro">Prog. ${fmtFecha(c.fecha_seguimiento_sugerida)}</span>`;
 }
 
-function renderTabla(clientes) {
-  const tbody = $("#tbodyClientes");
-  const vacio = $("#estadoVacio");
+function filaClienteHtml(c, incluirFechaAprobacion = true) {
+  return `
+    <td>
+      <div class="nombre-cliente">${escapeHtml(c.nombre)}</div>
+      <div class="telefono-cliente">${escapeHtml(c.telefono || "")}</div>
+    </td>
+    <td>${escapeHtml(c.carrier || "-")}</td>
+    <td>${escapeHtml(c.numero_poliza || "-")}</td>
+    <td>${badgeEstado(c.estado)}</td>
+    <td>${badgePoliza(c.estado_poliza)}</td>
+    <td>${fmtFecha(c.fecha_venta)}</td>
+    ${incluirFechaAprobacion ? `<td>${c.fecha_aprobacion ? fmtFecha(c.fecha_aprobacion) : "-"}</td>` : ""}
+    <td>${celdaSeguimiento(c)}</td>
+    <td><button class="btn btn-secondary btn-editar" data-id="${c.id}">Ver / Editar</button></td>
+  `;
+}
+
+function renderTablaEn(tbodySel, vacioSel, clientes, incluirFechaAprobacion = true) {
+  const tbody = $(tbodySel);
+  const vacio = $(vacioSel);
   tbody.innerHTML = "";
 
   if (!clientes.length) {
@@ -106,20 +123,7 @@ function renderTabla(clientes) {
 
   for (const c of clientes) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>
-        <div class="nombre-cliente">${escapeHtml(c.nombre)}</div>
-        <div class="telefono-cliente">${escapeHtml(c.telefono || "")}</div>
-      </td>
-      <td>${escapeHtml(c.carrier || "-")}</td>
-      <td>${escapeHtml(c.numero_poliza || "-")}</td>
-      <td>${badgeEstado(c.estado)}</td>
-      <td>${badgePoliza(c.estado_poliza)}</td>
-      <td>${fmtFecha(c.fecha_venta)}</td>
-      <td>${c.fecha_aprobacion ? fmtFecha(c.fecha_aprobacion) : "-"}</td>
-      <td>${celdaSeguimiento(c)}</td>
-      <td><button class="btn btn-secondary btn-editar" data-id="${c.id}">Ver / Editar</button></td>
-    `;
+    tr.innerHTML = filaClienteHtml(c, incluirFechaAprobacion);
     tr.querySelector(".btn-editar").addEventListener("click", (ev) => {
       ev.stopPropagation();
       abrirModal(c.id);
@@ -127,6 +131,72 @@ function renderTabla(clientes) {
     tr.addEventListener("click", () => abrirModal(c.id));
     tbody.appendChild(tr);
   }
+}
+
+function renderTabla(clientes) {
+  renderTablaEn("#tbodyClientes", "#estadoVacio", clientes, true);
+}
+
+// ---------- informe mensual ----------
+let MES_ACTUAL_INFORME = new Date().toISOString().slice(0, 7);
+
+async function cargarMesesDisponibles() {
+  const meses = await api("/informes/meses");
+  const nombresMes = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  const sel = $("#selectorMes");
+  sel.innerHTML = meses.map((m) => {
+    const [anio, mes] = m.mes.split("-");
+    const etiqueta = `${nombresMes[parseInt(mes, 10) - 1]} ${anio} (${m.total})`;
+    return `<option value="${m.mes}">${etiqueta}</option>`;
+  }).join("");
+  if (!meses.some((m) => m.mes === MES_ACTUAL_INFORME)) {
+    sel.insertAdjacentHTML("afterbegin", `<option value="${MES_ACTUAL_INFORME}">Mes actual (0)</option>`);
+  }
+  sel.value = MES_ACTUAL_INFORME;
+}
+
+function statCard(valor, etiqueta) {
+  return `<div class="stat-card"><div class="valor">${valor}</div><div class="etiqueta">${etiqueta}</div></div>`;
+}
+
+function statCardDesglose(titulo, obj) {
+  const items = Object.entries(obj).filter(([, v]) => v > 0);
+  const lista = items.length
+    ? items.map(([k, v]) => `<li><span>${escapeHtml(k)}</span><span>${v}</span></li>`).join("")
+    : `<li><span>Sin datos</span></li>`;
+  return `<div class="stat-card desglose"><div class="valor">${titulo}</div><ul>${lista}</ul></div>`;
+}
+
+async function cargarInformeMensual() {
+  const mes = $("#selectorMes").value || MES_ACTUAL_INFORME;
+  MES_ACTUAL_INFORME = mes;
+  const informe = await api("/informes/mensual?mes=" + encodeURIComponent(mes));
+
+  $("#statsGrid").innerHTML = [
+    statCard(informe.total, "Clientes vendidos"),
+    statCard(informe.por_estado["Aprobado"] || 0, "Aprobados"),
+    statCard(informe.por_estado["Negado"] || 0, "Negados"),
+    statCard(informe.por_estado["En proceso"] || 0, "En proceso"),
+    statCard(informe.por_estado_poliza["Recibida"] || 0, "Pólizas recibidas"),
+    statCard(informe.seguimiento_pendiente, "Seguimientos pendientes"),
+    statCardDesglose("Por carrier", informe.por_carrier),
+  ].join("");
+
+  renderTablaEn("#tbodyInforme", "#estadoVacioInforme", informe.clientes, false);
+}
+
+function exportarMes() {
+  const mes = $("#selectorMes").value || MES_ACTUAL_INFORME;
+  window.location.href = API + "/clientes/export?mes=" + encodeURIComponent(mes);
+}
+
+function cambiarTab(tab) {
+  const esClientes = tab === "clientes";
+  $("#tabClientes").classList.toggle("active", esClientes);
+  $("#tabInforme").classList.toggle("active", !esClientes);
+  $("#vistaClientes").hidden = !esClientes;
+  $("#vistaInforme").hidden = esClientes;
+  if (!esClientes) cargarInformeMensual();
 }
 
 function escapeHtml(str) {
@@ -157,6 +227,7 @@ function abrirModal(id = null) {
 
   renderNotas(clienteActual ? clienteActual.notas || [] : []);
   actualizarAvisoSeguimiento();
+  $("#autorNota").value = localStorage.getItem("posventa_autor") || "";
   $("#modalCliente").hidden = false;
 }
 
@@ -187,10 +258,11 @@ function renderNotas(notas) {
     const div = document.createElement("div");
     div.className = "nota-item";
     const fecha = n.fecha ? new Date(n.fecha).toLocaleString("es-ES") : "";
+    const metaTexto = [fecha, n.autor ? `por ${n.autor}` : ""].filter(Boolean).join(" · ");
     div.innerHTML = `
       <div>
         <div class="nota-texto">${escapeHtml(n.texto)}</div>
-        <div class="nota-meta">${fecha}</div>
+        <div class="nota-meta">${escapeHtml(metaTexto)}</div>
       </div>
       <button type="button" class="nota-borrar" data-id="${n.id}" title="Eliminar nota">🗑</button>
     `;
@@ -215,10 +287,13 @@ async function agregarNota() {
     toast("Guarda el cliente primero antes de agregar notas");
     return;
   }
+  const autor = $("#autorNota").value.trim();
+  if (autor) localStorage.setItem("posventa_autor", autor);
+
   try {
     const actualizado = await api(`/clientes/${clienteActual.id}/notas`, {
       method: "POST",
-      body: JSON.stringify({ texto }),
+      body: JSON.stringify({ texto, autor }),
     });
     clienteActual = actualizado;
     renderNotas(actualizado.notas || []);
@@ -252,6 +327,7 @@ async function guardarCliente(ev) {
       toast("Cliente creado");
     }
     await cargarClientes();
+    await cargarMesesDisponibles();
     cerrarModal();
   } catch (e) { toast(e.message, true); }
 }
@@ -263,6 +339,7 @@ async function eliminarCliente() {
     await api(`/clientes/${clienteActual.id}`, { method: "DELETE" });
     toast("Cliente eliminado");
     await cargarClientes();
+    await cargarMesesDisponibles();
     cerrarModal();
   } catch (e) { toast(e.message, true); }
 }
@@ -360,6 +437,7 @@ async function confirmarImportar() {
     filasImportarPendientes = [];
     $("#modalImportar").hidden = true;
     await cargarClientes();
+    await cargarMesesDisponibles();
   } catch (e) {
     toast(e.message, true);
   }
@@ -369,6 +447,12 @@ async function confirmarImportar() {
 document.addEventListener("DOMContentLoaded", async () => {
   await cargarMeta();
   await cargarClientes();
+  await cargarMesesDisponibles();
+
+  $("#tabClientes").addEventListener("click", () => cambiarTab("clientes"));
+  $("#tabInforme").addEventListener("click", () => cambiarTab("informe"));
+  $("#selectorMes").addEventListener("change", cargarInformeMensual);
+  $("#btnExportarMes").addEventListener("click", exportarMes);
 
   $("#buscar").addEventListener("input", debounce(cargarClientes, 250));
   $("#filtroCarrier").addEventListener("change", cargarClientes);

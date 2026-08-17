@@ -74,8 +74,8 @@ app.get("/api/meta", (req, res) => {
 // --- Listar clientes (con filtros opcionales) ---
 app.get("/api/clientes", async (req, res, next) => {
   try {
-    const { q, carrier, estado, seguimiento_pendiente } = req.query;
-    const { rows } = await pool.query("SELECT * FROM clientes ORDER BY actualizado_en DESC");
+    const { q, carrier, estado, seguimiento_pendiente, mes } = req.query;
+    const { rows } = await pool.query("SELECT * FROM clientes ORDER BY fecha_venta DESC, actualizado_en DESC");
     let clientes = rows.map(enriquecerCliente);
 
     if (q) {
@@ -87,14 +87,81 @@ app.get("/api/clientes", async (req, res, next) => {
     if (seguimiento_pendiente === "true") {
       clientes = clientes.filter((c) => c.seguimiento_pendiente);
     }
+    if (mes) {
+      clientes = clientes.filter((c) => c.fecha_venta && c.fecha_venta.slice(0, 7) === mes);
+    }
     res.json(clientes);
+  } catch (err) { next(err); }
+});
+
+// --- Lista de meses que tienen clientes (para el selector del informe) ---
+app.get("/api/informes/meses", async (req, res, next) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT to_char(fecha_venta, 'YYYY-MM') AS mes, COUNT(*)::int AS total
+       FROM clientes
+       WHERE fecha_venta IS NOT NULL
+       GROUP BY mes
+       ORDER BY mes DESC`
+    );
+    const mesActual = new Date().toISOString().slice(0, 7);
+    if (!rows.some((r) => r.mes === mesActual)) {
+      rows.unshift({ mes: mesActual, total: 0 });
+    }
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// --- Informe mensual detallado ---
+app.get("/api/informes/mensual", async (req, res, next) => {
+  try {
+    const mes = (req.query.mes || new Date().toISOString().slice(0, 7)).toString();
+    if (!/^\d{4}-\d{2}$/.test(mes)) {
+      return res.status(400).json({ error: "Formato de mes inválido, usa YYYY-MM" });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT * FROM clientes WHERE to_char(fecha_venta, 'YYYY-MM') = $1 ORDER BY fecha_venta ASC`,
+      [mes]
+    );
+    const clientes = rows.map(enriquecerCliente);
+
+    const porEstado = {};
+    for (const e of ESTADOS) porEstado[e] = 0;
+    const porEstadoPoliza = {};
+    for (const e of ESTADOS_POLIZA) porEstadoPoliza[e] = 0;
+    const porCarrier = {};
+    let seguimientoPendiente = 0;
+
+    for (const c of clientes) {
+      porEstado[c.estado] = (porEstado[c.estado] || 0) + 1;
+      porEstadoPoliza[c.estado_poliza] = (porEstadoPoliza[c.estado_poliza] || 0) + 1;
+      if (c.carrier) porCarrier[c.carrier] = (porCarrier[c.carrier] || 0) + 1;
+      if (c.seguimiento_pendiente) seguimientoPendiente++;
+    }
+
+    res.json({
+      mes,
+      total: clientes.length,
+      por_estado: porEstado,
+      por_estado_poliza: porEstadoPoliza,
+      por_carrier: porCarrier,
+      seguimiento_pendiente: seguimientoPendiente,
+      clientes,
+    });
   } catch (err) { next(err); }
 });
 
 // --- Exportar todo (CSV descargable) ---
 app.get("/api/clientes/export", async (req, res, next) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM clientes ORDER BY actualizado_en DESC");
+    const mes = req.query.mes;
+    const { rows } = mes && /^\d{4}-\d{2}$/.test(mes)
+      ? await pool.query(
+          `SELECT * FROM clientes WHERE to_char(fecha_venta, 'YYYY-MM') = $1 ORDER BY fecha_venta ASC`,
+          [mes]
+        )
+      : await pool.query("SELECT * FROM clientes ORDER BY actualizado_en DESC");
     const clientes = rows.map(enriquecerCliente);
 
     const columnas = [
@@ -124,9 +191,10 @@ app.get("/api/clientes/export", async (req, res, next) => {
 
     const csv = "﻿" + filas.join("\n");
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    const sufijo = mes && /^\d{4}-\d{2}$/.test(mes) ? mes : new Date().toISOString().slice(0, 10);
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename="posventa-mario-izzo-${new Date().toISOString().slice(0, 10)}.csv"`
+      `attachment; filename="posventa-mario-izzo-${sufijo}.csv"`
     );
     res.send(csv);
   } catch (err) { next(err); }
