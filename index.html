@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Posventa Mario Izzo</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <img src="img/logo-toro-impact.jpeg" alt="Toro Impact" class="logo" />
+  <h1>POSVENTA <span class="hl">MARIO IZZO</span></h1>
+  <p class="subtitle">Control de seguimiento post-venta de pólizas</p>
+</header>
+
+<main class="container">
+
+  <section class="panel toolbar">
+    <div class="toolbar-row">
+      <input id="buscar" type="text" placeholder="Buscar cliente por nombre..." />
+      <select id="filtroCarrier"><option value="">Todos los carriers</option></select>
+      <select id="filtroEstado"><option value="">Todos los estados</option></select>
+      <label class="checkbox-pill">
+        <input type="checkbox" id="filtroSeguimiento" />
+        Solo seguimiento pendiente
+      </label>
+      <button id="btnImportar" class="btn btn-secondary">⇪ Agregar información (importar archivo)</button>
+      <button id="btnExportar" class="btn btn-secondary">⇩ Descargar toda la información</button>
+      <button id="btnNuevo" class="btn btn-primary">+ Nuevo cliente</button>
+      <input type="file" id="inputImportar" accept=".csv,.xlsx,.xls" hidden />
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="table-wrap">
+      <table id="tablaClientes">
+        <thead>
+          <tr>
+            <th>Cliente</th>
+            <th>Carrier</th>
+            <th>N° Póliza</th>
+            <th>Estado</th>
+            <th>Póliza</th>
+            <th>Fecha venta</th>
+            <th>Fecha aprobación</th>
+            <th>Seguimiento (2 sem.)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbodyClientes">
+        </tbody>
+      </table>
+      <p id="estadoVacio" class="empty-state" hidden>No hay clientes registrados todavía. Agrega el primero con "Nuevo cliente".</p>
+    </div>
+  </section>
+</main>
+
+<!-- Modal crear / editar cliente -->
+<div id="modalCliente" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitulo">Nuevo cliente</h2>
+      <button class="btn-close" id="cerrarModal">&times;</button>
+    </div>
+
+    <form id="formCliente">
+      <input type="hidden" id="clienteId" />
+
+      <div class="field">
+        <label>Nombre y apellido *</label>
+        <input type="text" id="nombre" required />
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Teléfono</label>
+          <input type="text" id="telefono" placeholder="(555) 555-5555" />
+        </div>
+        <div class="field">
+          <label>Carrier</label>
+          <select id="carrier"></select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Estado de aprobación</label>
+          <select id="estado"></select>
+        </div>
+        <div class="field">
+          <label>¿Recibió la póliza?</label>
+          <select id="estado_poliza"></select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Número de póliza</label>
+          <input type="text" id="numero_poliza" placeholder="Ej. POL-123456" />
+        </div>
+        <div class="field">
+          <label>Fecha de aprobación</label>
+          <input type="date" id="fecha_aprobacion" />
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label>Fecha de venta</label>
+          <input type="date" id="fecha_venta" />
+        </div>
+        <div class="field">
+          <label>Fecha de llamada de seguimiento</label>
+          <input type="date" id="fecha_llamada_seguimiento" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="checkbox-pill full">
+          <input type="checkbox" id="llamada_seguimiento_realizada" />
+          Llamada de seguimiento (2 semanas) realizada
+        </label>
+      </div>
+
+      <p id="avisoSeguimiento" class="hint" hidden></p>
+
+      <div class="field">
+        <label>Notas</label>
+        <div id="listaNotas" class="notas-lista"></div>
+        <div class="nota-input-row">
+          <input type="text" id="nuevaNota" placeholder="Escribe una nota y presiona Enter..." />
+          <button type="button" id="btnAgregarNota" class="btn btn-secondary">Agregar</button>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" id="btnEliminar" class="btn btn-danger" hidden>Eliminar cliente</button>
+        <div class="spacer"></div>
+        <button type="button" id="btnCancelar" class="btn btn-secondary">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal confirmar importación -->
+<div id="modalImportar" class="modal-overlay" hidden>
+  <div class="modal modal-sm">
+    <div class="modal-header">
+      <h2>Importar clientes</h2>
+      <button class="btn-close" id="cerrarModalImportar">&times;</button>
+    </div>
+    <p id="resumenImportar" class="hint" style="margin-top:0;"></p>
+    <div id="previewImportar" class="import-preview"></div>
+    <p class="ayuda-importar">
+      El archivo debe tener columnas como: <strong>nombre</strong>, telefono, carrier, estado, estado_poliza, numero_poliza, fecha_aprobacion, fecha_venta.
+      Puedes usar el botón "Descargar toda la información" como plantilla de ejemplo.
+    </p>
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button type="button" id="btnCancelarImportar" class="btn btn-secondary">Cancelar</button>
+      <button type="button" id="btnConfirmarImportar" class="btn btn-primary">Confirmar importación</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
