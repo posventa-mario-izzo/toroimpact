@@ -444,11 +444,12 @@ async function confirmarImportar() {
 }
 
 // ---------- eventos ----------
-document.addEventListener("DOMContentLoaded", async () => {
-  await cargarMeta();
-  await cargarClientes();
-  await cargarMesesDisponibles();
-
+// IMPORTANTE: los botones se conectan primero, de forma síncrona, ANTES de
+// cargar cualquier dato del servidor. Así, aunque la carga inicial falle o
+// tarde (por ejemplo, mientras el servidor gratuito de Render está
+// "despertando"), los botones (Cancelar, Nuevo cliente, pestañas, etc.)
+// siempre responden.
+document.addEventListener("DOMContentLoaded", () => {
   $("#tabClientes").addEventListener("click", () => cambiarTab("clientes"));
   $("#tabInforme").addEventListener("click", () => cambiarTab("informe"));
   $("#selectorMes").addEventListener("change", cargarInformeMensual);
@@ -479,7 +480,27 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#cerrarModalImportar").addEventListener("click", () => { $("#modalImportar").hidden = true; });
   $("#btnCancelarImportar").addEventListener("click", () => { $("#modalImportar").hidden = true; });
   $("#btnConfirmarImportar").addEventListener("click", confirmarImportar);
+
+  cargarDatosIniciales();
 });
+
+async function cargarDatosIniciales(intento = 1) {
+  try {
+    await cargarMeta();
+    await cargarClientes();
+    await cargarMesesDisponibles();
+  } catch (e) {
+    console.error(e);
+    if (intento < 5) {
+      // El servidor gratuito puede tardar en "despertar" tras estar inactivo;
+      // reintentamos varias veces antes de avisarle a la persona.
+      if (intento === 1) toast("Conectando con el servidor (puede tardar unos segundos)...");
+      setTimeout(() => cargarDatosIniciales(intento + 1), 4000);
+    } else {
+      toast("No se pudo conectar con el servidor. Verifica tu conexión y recarga la página.", true);
+    }
+  }
+}
 
 function debounce(fn, ms) {
   let t;
